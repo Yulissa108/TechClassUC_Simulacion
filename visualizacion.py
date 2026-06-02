@@ -4,11 +4,12 @@ Módulo: visualizacion.py
 Se encarga de procesar los datos de las simulaciones y exportar de forma autónoma
 las 5 gráficas requeridas por la guía en formato PNG.
 """
+import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c):
+def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c, ruta_guardado="."):
     # Configuramos el estilo visual base para que se vea limpio y académico
     sns.set_theme(style="whitegrid")
     
@@ -26,7 +27,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.ylabel("Cantidad de Clientes", fontsize=10)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("grafica_1_evolucion_temporal.png", dpi=150)
+    plt.savefig(os.path.join(ruta_guardado, "grafica_1_evolucion_temporal.png"), dpi=150)
     plt.close()
 
     # -------------------------------------------------------------------------
@@ -42,7 +43,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.ylabel("Frecuencia (Jornadas)", fontsize=10)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("grafica_2_distribucion_wq.png", dpi=150)
+    plt.savefig(os.path.join(ruta_guardado, "grafica_2_distribucion_wq.png"), dpi=150)
     plt.close()
 
     # -------------------------------------------------------------------------
@@ -50,7 +51,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
     # Analizamos para la lambda base = 10 clientes/hora
-    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['estable']]
+    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['stable']]
     wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
     
     plt.plot(c_estables, wq_minutos, marker='o', markersize=8, color='firebrick', linewidth=2.5, label='Tiempo de Espera')
@@ -61,7 +62,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.xticks(lista_c)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("grafica_3_capacidad_wq.png", dpi=150)
+    plt.savefig(os.path.join(ruta_guardado, "grafica_3_capacidad_wq.png"), dpi=150)
     plt.close()
 
     # -------------------------------------------------------------------------
@@ -75,12 +76,11 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     
     plt.axhline(1.0, color='black', linestyle='--', alpha=0.7, label='Límite de Saturación (ρ = 1.0)')
     plt.title("Factor de Utilización del Sistema (ρ) vs Tasa de Llegada (λ)", fontsize=12, fontweight='bold')
-    # Convertimos las etiquetas de las lambdas de la gráfica a formato legible (+20% es 12)
     plt.xlabel("Tasa de Llegada λ (Clientes / Hora)", fontsize=10)
     plt.ylabel("Factor de Utilización promedio (ρ)", fontsize=10)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("grafica_4_utilizacion_rho.png", dpi=150)
+    plt.savefig(os.path.join(ruta_guardado, "grafica_4_utilizacion_rho.png"), dpi=150)
     plt.close()
 
     # -------------------------------------------------------------------------
@@ -92,7 +92,6 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     for i, c in enumerate(lista_c):
         for j, lam in enumerate(lista_lambdas):
             val = matriz_sensibilidad[c][lam]['Wq']
-            # Guardamos el tiempo convertido en minutos; si es inestable ponemos NaN
             grid_wq[i, j] = val * 60 if val is not None else np.nan
 
     sns.heatmap(grid_wq, annot=True, fmt=".1f", cmap="YlOrRd", cbar=True,
@@ -104,7 +103,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.xlabel("Tasa de Llegada de Clientes λ (Clientes / Hora)", fontsize=10)
     plt.ylabel("Número de Técnicos Disponibles (c)", fontsize=10)
     plt.tight_layout()
-    plt.savefig("grafica_5_heatmap_sensibilidad.png", dpi=150)
+    plt.savefig(os.path.join(ruta_guardado, "grafica_5_heatmap_sensibilidad.png"), dpi=150)
     plt.close()
     
     print("[INFO] ¡Las 5 gráficas profesionales han sido exportadas con éxito en formato PNG!")
