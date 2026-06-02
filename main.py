@@ -110,7 +110,6 @@ def main():
     print(">>> Diseñando e imprimiendo el tablero de gráficas...")
     # Agregamos la ruta local por defecto para evitar problemas en ejecuciones directas
     generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c)
-
     # -------------------------------------------------------------------------
     # 7. CONCLUSIONES DE NEGOCIO (PREGUNTAS DIRECTIVAS)
     # -------------------------------------------------------------------------
