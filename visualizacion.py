@@ -16,20 +16,31 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     # GRÁFICA 1: Evolución temporal del número de clientes (Réplica representativa)
     # -------------------------------------------------------------------------
+   # -------------------------------------------------------------------------
+    # GRÁFICA 1: Evolución temporal del número de clientes (CORREGIDA - ESCALERA)
+    # -------------------------------------------------------------------------
     plt.figure(figsize=(9, 5))
-    if datos_ejemplo:
-        tiempos = [m['llegada'] for m in datos_ejemplo]
-        # Aproximación del volumen dinámico de la cola a lo largo de las horas
+    
+    # Comprobamos que existan las listas de series de tiempo reales dentro de datos_ejemplo
+    if isinstance(datos_ejemplo, dict) and 'tiempo' in datos_ejemplo and 'clientes' in datos_ejemplo:
+        # Usamos plt.step con 'post' porque el número de personas cambia discretamente en saltos
+        plt.step(datos_ejemplo['tiempo'], datos_ejemplo['clientes'], where='post', color='darkcyan', linewidth=1.8, label='Clientes en sistema')
+    elif isinstance(datos_ejemplo, list) and len(datos_ejemplo) > 0:
+        # Resguardo por si tus datos de ejemplo vienen en formato de lista de diccionarios antiguos
+        tiempos = [m.get('llegada', 0) for m in datos_ejemplo]
         clientes_en_tiempo = np.cumsum([1] * len(tiempos)) - np.arange(len(tiempos))
-        plt.plot(tiempos, clientes_en_tiempo, color='darkcyan', linewidth=2, label='Clientes en sistema')
+        plt.step(tiempos, clientes_en_tiempo, where='post', color='darkcyan', linewidth=1.8, label='Clientes en sistema (Aprox)')
+    else:
+        plt.text(0.5, 0.5, "Datos de evolución temporal no disponibles", ha='center', va='center', color='gray')
+
     plt.title("Evolución Temporal del Número de Clientes en el Sistema", fontsize=12, fontweight='bold')
     plt.xlabel("Reloj de Simulación (Horas)", fontsize=10)
-    plt.ylabel("Cantidad de Clientes", fontsize=10)
-    plt.legend()
+    plt.ylabel("Cantidad de Clientes (L)", fontsize=10)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.legend(loc='upper right')
     plt.tight_layout()
     plt.savefig(os.path.join(ruta_guardado, "grafica_1_evolucion_temporal.png"), dpi=150)
     plt.close()
-
     # -------------------------------------------------------------------------
     # GRÁFICA 2: Histogramas de tiempos de espera Wq (Verificación TCL)
     # -------------------------------------------------------------------------
