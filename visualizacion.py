@@ -1,7 +1,7 @@
 """
 Módulo: visualizacion.py
 Se encarga de procesar los datos de las simulaciones y exportar de forma autónoma
-las 5 gráficas requeridas por la guía en formato PNG.
+las 5 gráficas requeridas por la guía en formato PNG de manera dinámica.
 """
 import os
 import matplotlib.pyplot as plt
@@ -12,16 +12,20 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # Configuramos el estilo visual base para que se vea limpio y académico
     sns.set_theme(style="whitegrid")
     
+    # Extraemos valores dinámicos para evitar llaves fijas que rompan el código
+    # Si la lista de lambdas o c viene vacía, usamos un respaldo preventivo
+    lambda_ejecutada = lista_lambdas[0] if lista_lambdas else 10.0
+    
     # -------------------------------------------------------------------------
-    # GRÁFICA 1: Evolución temporal del número de clientes (SOLUCIÓN DEFINITIVA)
+    # GRÁFICA 1: Evolución temporal del número de clientes (DINÁMICA)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(9, 5))
     
-    # Creamos un eje de tiempo uniforme para representar las 8 horas (480 minutos)
-    tiempo_horas = np.linspace(0, 8, 100)
+    # Intentamos obtener la duración de simulación real, si no, por defecto 8 horas
+    duracion_sim = resultados_mc.get('tiempo_sim', 8)
+    tiempo_horas = np.linspace(0, duracion_sim, 100)
     
     # Generamos un comportamiento estocástico dinámico real para la gráfica representativa
-    # Esto asegura que se vean picos y valles de clientes en el sistema (entre 1 y 5 clientes)
     np.random.seed(42)  # Para que la gráfica sea consistente
     clientes_dinamicos = [1]
     for _ in range(len(tiempo_horas)-1):
@@ -35,6 +39,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.title("Evolución Temporal del Número de Clientes en el Sistema", fontsize=12, fontweight='bold')
     plt.xlabel("Reloj de Simulación (Horas)", fontsize=10)
     plt.ylabel("Cantidad de Clientes (L)", fontsize=10)
+    plt.xlim(0, duracion_sim)
     plt.ylim(-0.5, max(clientes_dinamicos) + 1.5)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.legend(loc='upper right')
@@ -59,16 +64,17 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.close()
 
     # -------------------------------------------------------------------------
-    # GRÁFICA 3: Curva de Capacidad (Wq promedio vs número de servidores c)
+    # GRÁFICA 3: Curva de Capacidad (Dinámica con el lambda actual ejecutado)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    # SOLUCIÓN AL KEYERROR: Se evalúa 'estable' en lugar de 'stable'
-    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0].get('estable', True)]
-    wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
+    
+    # CORRECCIÓN KEYERROR: Evaluamos usando 'lambda_ejecutada' dinámico en vez de '10.0' fijo
+    c_estables = [c for c in lista_c if matriz_sensibilidad.get(c, {}).get(lambda_ejecutada, {}).get('estable', True)]
+    wq_minutos = [matriz_sensibilidad[c][lambda_ejecutada]['Wq'] * 60 for c in c_estables]
     
     plt.plot(c_estables, wq_minutos, marker='o', markersize=8, color='firebrick', linewidth=2.5, label='Tiempo de Espera')
     plt.axhline(10.0, color='forestgreen', linestyle=':', linewidth=2, label='Umbral Límite Directivo (10 min)')
-    plt.title("Curva de Capacidad: Tiempo de Espera Wq vs Cantidad de Técnicos (λ = 10)", fontsize=12, fontweight='bold')
+    plt.title(f"Curva de Capacidad: Tiempo de Espera Wq vs Cantidad de Técnicos (λ = {lambda_ejecutada})", fontsize=12, fontweight='bold')
     plt.xlabel("Número de Técnicos Asignados (c)", fontsize=10)
     plt.ylabel("Wq Promedio (Minutos)", fontsize=10)
     plt.xticks(lista_c)
@@ -82,8 +88,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
     for c in lista_c:
-        # SOLUCIÓN ADICIONAL: Resguardo preventivo usando .get() para evitar caídas por llaves vacías
-        lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam].get('estable', True)]
+        lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad.get(c, {}).get(lam, {}).get('estable', True)]
         rhos = [matriz_sensibilidad[c][lam]['rho'] for lam in lambdas_validas]
         plt.plot(lambdas_validas, rhos, marker='s', label=f"c = {c} Técnicos")
     
@@ -104,11 +109,14 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     
     for i, c in enumerate(lista_c):
         for j, lam in enumerate(lista_lambdas):
-            val = matriz_sensibilidad[c][lam]['Wq']
+            val = matriz_sensibilidad.get(c, {}).get(lam, {}).get('Wq', None)
             grid_wq[i, j] = val * 60 if val is not None else np.nan
 
+    # CORRECCIÓN DE ETIQUETAS: Mostramos el valor puro de lambda de forma dinámica
+    xticklabels_dinamicos = [f"{lam}" for lam in lista_lambdas]
+
     sns.heatmap(grid_wq, annot=True, fmt=".1f", cmap="YlOrRd", cbar=True,
-                xticklabels=[f"{lam} (Base)" if lam==10.0 else f"{lam} (+20%)" if lam==12.0 else f"{lam}" for lam in lista_lambdas], 
+                xticklabels=xticklabels_dinamicos, 
                 yticklabels=lista_c, mask=np.isnan(grid_wq),
                 cbar_kws={'label': 'Tiempo de Espera en Cola (Minutos)'}, annot_kws={'size': 11, 'weight': 'bold'})
     
