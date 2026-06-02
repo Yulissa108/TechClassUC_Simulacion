@@ -1,3 +1,4 @@
+# app.py
 import os
 import sys
 from flask import Flask, render_template_string, send_from_directory
@@ -39,7 +40,10 @@ from visualizacion import generar_graficas
 
 resultados_mc, datos_ejemplo = montecarlo.correr_replicas(N_REPLICAS, SEMILLA_BASE, LAMBDA_BASE, MU_BASE, C_BASE, T_SIM_HORAS, T_WARM_HORAS)
 matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(N_REPLICAS, SEMILLA_BASE, lista_lambdas, lista_c, MU_BASE, T_SIM_HORAS, T_WARM_HORAS)
-generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c)
+
+# Aquí le pasamos explícitamente la ruta de guardado segura para la web
+generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c, ruta_guardado=GRAFICAS_DIR)
+
 # El diseño visual de tu página web ejecutiva
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -53,8 +57,9 @@ HTML_TEMPLATE = """
         h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
         pre { background: #282c34; color: #abb2bf; padding: 20px; border-radius: 6px; overflow-x: auto; font-size: 14px; line-height: 1.5; }
         .grid-graficas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
-        .card { background: #fff; border: 1px solid #ddd; padding: 10px; border-radius: 6px; text-align: center; }
-        .card img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #eee; }
+        .card { background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 6px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; color: #333; font-size: 15px; }
+        .card img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #eee; margin-top: 10px; }
         .full-width { grid-column: span 2; }
     </style>
 </head>
