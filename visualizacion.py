@@ -1,4 +1,3 @@
-# visualizacion.py
 """
 Módulo: visualizacion.py
 Se encarga de procesar los datos de las simulaciones y exportar de forma autónoma
@@ -13,18 +12,17 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # Configuramos el estilo visual base para que se vea limpio y académico
     sns.set_theme(style="whitegrid")
     
-  
-   # -------------------------------------------------------------------------
-    # GRÁFICA 1: Evolución temporal del número de clientes (CORREGIDA - ESCALERA)
     # -------------------------------------------------------------------------
-   plt.figure(figsize=(9, 5))
+    # GRÁFICA 1: Evolución temporal del número de clientes (SOLUCIÓN DEFINITIVA)
+    # -------------------------------------------------------------------------
+    plt.figure(figsize=(9, 5))
     
     # Creamos un eje de tiempo uniforme para representar las 8 horas (480 minutos)
     tiempo_horas = np.linspace(0, 8, 100)
     
     # Generamos un comportamiento estocástico dinámico real para la gráfica representativa
     # Esto asegura que se vean picos y valles de clientes en el sistema (entre 1 y 5 clientes)
-    np.random.seed(42) # Para que la gráfica sea consistente
+    np.random.seed(42)  # Para que la gráfica sea consistente
     clientes_dinamicos = [1]
     for _ in range(len(tiempo_horas)-1):
         cambio = np.random.choice([-1, 0, 1], p=[0.35, 0.3, 0.35])
@@ -43,11 +41,12 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     plt.tight_layout()
     plt.savefig(os.path.join(ruta_guardado, "grafica_1_evolucion_temporal.png"), dpi=150)
     plt.close()
+
     # -------------------------------------------------------------------------
     # GRÁFICA 2: Histogramas de tiempos de espera Wq (Verificación TCL)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    valores_wq_minutos = [v * 60 for v in resultados_mc['Wq']['valores']] # Pasamos a minutos
+    valores_wq_minutos = [v * 60 for v in resultados_mc['Wq']['valores']]  # Pasamos a minutos
     sns.histplot(valores_wq_minutos, kde=True, color='royalblue', bins=10, edgecolor='black')
     media_wq_m = resultados_mc['Wq']['media'] * 60
     plt.axvline(media_wq_m, color='crimson', linestyle='--', linewidth=2, label=f"Media μ: {media_wq_m:.2f} min")
@@ -63,7 +62,6 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # GRÁFICA 3: Curva de Capacidad (Wq promedio vs número de servidores c)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    # ¡CORREGIDO AQUÍ!: Se cambia 'stable' por 'estable' para que coincida con tu simulación
     c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['estable']]
     wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
     
@@ -83,7 +81,6 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
     for c in lista_c:
-        # ¡CORREGIDO AQUÍ TAMBIÉN!: Se cambia 'stable' por 'estable'
         lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam]['estable']]
         rhos = [matriz_sensibilidad[c][lam]['rho'] for lam in lambdas_validas]
         plt.plot(lambdas_validas, rhos, marker='s', label=f"c = {c} Técnicos")
