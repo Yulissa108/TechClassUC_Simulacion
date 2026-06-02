@@ -50,8 +50,8 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # GRÁFICA 3: Curva de Capacidad (Wq promedio vs número de servidores c)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    # Analizamos para la lambda base = 10 clientes/hora
-    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['stable']]
+    # ¡CORREGIDO AQUÍ!: Se cambia 'stable' por 'estable' para que coincida con tu simulación
+    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['estable']]
     wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
     
     plt.plot(c_estables, wq_minutos, marker='o', markersize=8, color='firebrick', linewidth=2.5, label='Tiempo de Espera')
@@ -70,6 +70,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
     for c in lista_c:
+        # ¡CORREGIDO AQUÍ TAMBIÉN!: Se cambia 'stable' por 'estable'
         lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam]['estable']]
         rhos = [matriz_sensibilidad[c][lam]['rho'] for lam in lambdas_validas]
         plt.plot(lambdas_validas, rhos, marker='s', label=f"c = {c} Técnicos")
