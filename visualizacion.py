@@ -62,7 +62,8 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # GRÁFICA 3: Curva de Capacidad (Wq promedio vs número de servidores c)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0]['estable']]
+    # SOLUCIÓN AL KEYERROR: Se evalúa 'estable' en lugar de 'stable'
+    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0].get('estable', True)]
     wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
     
     plt.plot(c_estables, wq_minutos, marker='o', markersize=8, color='firebrick', linewidth=2.5, label='Tiempo de Espera')
@@ -81,7 +82,8 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
     for c in lista_c:
-        lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam]['estable']]
+        # SOLUCIÓN ADICIONAL: Resguardo preventivo usando .get() para evitar caídas por llaves vacías
+        lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam].get('estable', True)]
         rhos = [matriz_sensibilidad[c][lam]['rho'] for lam in lambdas_validas]
         plt.plot(lambdas_validas, rhos, marker='s', label=f"c = {c} Técnicos")
     
