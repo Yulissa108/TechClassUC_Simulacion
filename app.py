@@ -13,7 +13,7 @@ GRAFICAS_DIR = os.path.join(BASE_DIR, "static_graficas")
 if not os.path.exists(GRAFICAS_DIR):
     os.makedirs(GRAFICAS_DIR)
 
-# Importamos las variables base como valores por defecto iniciales
+# Importamos los módulos del proyecto
 import main
 import montecarlo
 import sensibilidad
@@ -34,6 +34,9 @@ HTML_TEMPLATE = """
         h1 { color: #00d2ff; font-size: 26px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 25px; }
         h2 { color: #ffffff; font-size: 18px; margin-top: 40px; border-left: 4px solid #00f2fe; padding-left: 10px; }
         p { color: #94a3b8; }
+        
+        /* Alertas de error de saturación */
+        .alert-danger { background-color: rgba(239, 68, 68, 0.2); border: 1px solid #f87171; color: #f87171; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; }
         
         /* Estilos del Formulario Superior */
         .form-container { background: #151f32; border: 1px solid #1e293b; padding: 25px; border-radius: 12px; margin-bottom: 35px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
@@ -93,6 +96,12 @@ HTML_TEMPLATE = """
                 <button type="submit" class="btn-simular">⚡ Ejecutar Simulación Dinámica</button>
             </form>
         </div>
+
+        {% if error_msg %}
+        <div class="alert-danger">
+            ⚠️ {{ error_msg }}
+        </div>
+        {% endif %}
 
         <p style="color: #34d399; font-weight: bold;">✓ Mostrando resultados para: &lambda;={{inputs.lam}}, &mu;={{inputs.mu}}, c={{inputs.c}}, N={{inputs.n}}</p>
 
@@ -207,8 +216,8 @@ def home():
     mu = main.MU_BASE
     c = main.C_BASE
     n = main.N_REPLICAS
+    error_msg = None
 
-    # Si el usuario presiona el botón, capturamos lo que escribió en las cajitas
     if request.method == 'POST':
         try:
             lam = float(request.form.get('lambda_val', lam))
@@ -218,68 +227,81 @@ def home():
         except ValueError:
             pass
 
-    # =========================================================================
-    # EJECUCIÓN DEL MOTOR MATEMÁTICO EN TIEMPO REAL
-    # =========================================================================
-    resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, main.T_SIM_HORAS, main.T_WARM_HORAS)
-    
-    # Adaptación dinámica de listas para el análisis de sensibilidad según las entradas
-    lista_lambdas_dinamica = [max(0.5, lam - 2), lam, lam + 2, lam + 4]
-    lista_c_dinamica = [max(1, c - 1), c, c + 1, c + 2]
-    
-    matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, main.T_SIM_HORAS, main.T_WARM_HORAS)
-    
-    # Forzamos la regeneración de los archivos de imagen (.png) con los nuevos datos
-    generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas_dinamica, lista_c_dinamica, ruta_guardado=GRAFICAS_DIR)
+    # Validación preventiva de estabilidad del sistema matemático (Evita colapso por saturación)
+    if lam >= (c * mu):
+        error_msg = f"Aviso de Saturación: El sistema es inestable porque la tasa de llegada (λ={lam}) es mayor o igual que la capacidad máxima de atención (c*μ={c*mu}). Las colas crecerán indefinidamente."
 
-    # Cálculos estadísticos
-    rho_sim = resultados_mc['rho']['media']
-    lq_sim  = resultados_mc['Lq']['media']
-    wq_sim  = resultados_mc['Wq']['media']
-    l_sim   = lq_sim + (lam / mu)
-    w_sim   = wq_sim + (1 / mu)
+    # =========================================================================
+    # EJECUCIÓN CON CONTENCIÓN DE ERRORES MATEMÁTICOS
+    # =========================================================================
+    try:
+        resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, main.T_SIM_HORAS, main.T_WARM_HORAS)
+        
+        lista_lambdas_dinamica = [max(0.5, lam - 2), lam, lam + 2, lam + 4]
+        lista_c_dinamica = [max(1, c - 1), c, c + 1, c + 2]
+        
+        matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, main.T_SIM_HORAS, main.T_WARM_HORAS)
+        generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas_dinamica, lista_c_dinamica, ruta_guardado=GRAFICAS_DIR)
 
-    # Analítico Teórico
-    rho_teo = lam / (c * mu)
+        rho_sim = resultados_mc['rho']['media']
+        lq_sim  = resultados_mc['Lq']['media']
+        wq_sim  = resultados_mc['Wq']['media']
+    except Exception as e:
+        error_msg = f"Error en simulación: Valores extremos causaron una indeterminación matemática. Intente aumentar los servidores o reducir la llegada."
+        rho_sim, lq_sim, wq_sim = 0.99, 50.0, 1.0
+
+    l_sim   = lq_sim + (lam / mu) if mu > 0 else 0
+    w_sim   = wq_sim + (1 / mu) if mu > 0 else 0
+
+    # Analítico Teórico M/M/c
+    rho_teo = lam / (c * mu) if mu > 0 else 0.99
     if rho_teo >= 1:
-        # Prevención de colapso si la utilización teórica satura el sistema (rho >= 1)
         rho_teo = 0.9999
 
-    suma_p0 = sum([(lam / mu)**i / math.factorial(i) for i in range(c)])
-    suma_p0 += ((lam / mu)**c / (math.factorial(c) * (1 - rho_teo)))
-    p0_teo = 1 / suma_p0 if suma_p0 > 0 else 0.001
+    try:
+        suma_p0 = sum([(lam / mu)**i / math.factorial(i) for i in range(c)])
+        suma_p0 += ((lam / mu)**c / (math.factorial(c) * (1 - rho_teo)))
+        p0_teo = 1 / suma_p0 if suma_p0 > 0 else 0.001
 
-    lq_teo = (p0_teo * ((lam / mu)**c) * rho_teo) / (math.factorial(c) * ((1 - rho_teo)**2))
-    wq_teo = lq_teo / lam if lam > 0 else 0
-    l_teo  = lq_teo + (lam / mu)
-    w_teo  = wq_teo + (1 / mu)
+        lq_teo = (p0_teo * ((lam / mu)**c) * rho_teo) / (math.factorial(c) * ((1 - rho_teo)**2))
+        wq_teo = lq_teo / lam if lam > 0 else 0
+        l_teo  = lq_teo + (lam / mu)
+        w_teo  = wq_teo + (1 / mu)
+    except:
+        lq_teo, wq_teo, l_teo, w_teo = 0, 0, 0, 0
 
-    # Errores relativos
-    err_rho = abs(rho_teo - rho_sim) / rho_teo * 100
+    # Errores relativos controlados
+    err_rho = abs(rho_teo - rho_sim) / rho_teo * 100 if rho_teo > 0 else 0
     err_lq  = abs(lq_teo - lq_sim) / lq_teo * 100 if lq_teo > 0 else 0
     err_wq  = abs(wq_teo - wq_sim) / wq_teo * 100 if wq_teo > 0 else 0
     err_l   = abs(l_teo - l_sim) / l_teo * 100 if l_teo > 0 else 0
     err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
 
-    # Intervalos
-    wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60
-    lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
-    rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
+    # Intervalos seguros
+    try:
+        wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60
+        lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
+        rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
+    except:
+        wq_ic_inf, wq_ic_sup, lq_ic_inf, lq_ic_sup, rho_ic_inf, rho_ic_sup = 0, 0, 0, 0, 0, 0
 
     # N Mínimo
-    valores_wq = resultados_mc['Wq']['valores']
-    media_wq = np.mean(valores_wq)
-    desviacion_wq = np.std(valores_wq, ddof=1)
-    n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2 if media_wq > 0 else 30
-    n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
+    try:
+        valores_wq = resultados_mc['Wq']['valores']
+        media_wq = np.mean(valores_wq)
+        desviacion_wq = np.std(valores_wq, ddof=1)
+        n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2 if media_wq > 0 else 30
+        n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
+    except:
+        n_minimo_calculado = 30
 
-    # ID aleatorio para forzar al navegador a no guardar en caché las imágenes generadas
     import random
     rand_id = random.randint(1, 99999)
 
     return render_template_string(
         HTML_TEMPLATE,
         inputs={'lam': lam, 'mu': mu, 'c': c, 'n': n},
+        error_msg=error_msg,
         rho_sim=rho_sim, lq_sim=lq_sim, wq_sim=wq_sim, l_sim=l_sim, w_sim=w_sim,
         rho_teo=rho_teo, lq_teo=lq_teo, wq_teo=wq_teo, l_teo=l_teo, w_teo=w_teo,
         err_rho=err_rho, err_lq=err_lq, err_wq=err_wq, err_l=err_l, err_w=err_w,
