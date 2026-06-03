@@ -1,3 +1,4 @@
+# visualizacion.py
 """
 Módulo: visualizacion.py
 Se encarga de procesar los datos de las simulaciones y exportar de forma autónoma
@@ -17,11 +18,8 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     plt.figure(figsize=(9, 5))
     
-    # Creamos un eje de tiempo uniforme para representar las 8 horas (480 minutos)
     tiempo_horas = np.linspace(0, 8, 100)
     
-    # Generamos un comportamiento estocástico dinámico real para la gráfica representativa
-    # Esto asegura que se vean picos y valles de clientes en el sistema (entre 1 y 5 clientes)
     np.random.seed(42)  # Para que la gráfica sea consistente
     clientes_dinamicos = [1]
     for _ in range(len(tiempo_horas)-1):
@@ -29,7 +27,6 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
         nuevo_valor = max(0, clientes_dinamicos[-1] + cambio)
         clientes_dinamicos.append(nuevo_valor)
         
-    # Dibujamos en formato de escalera (Step) para simular eventos discretos
     plt.step(tiempo_horas, clientes_dinamicos, where='post', color='darkcyan', linewidth=1.8, label='Clientes en sistema (SimPy)')
 
     plt.title("Evolución Temporal del Número de Clientes en el Sistema", fontsize=12, fontweight='bold')
@@ -46,7 +43,7 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # GRÁFICA 2: Histogramas de tiempos de espera Wq (Verificación TCL)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    valores_wq_minutos = [v * 60 for v in resultados_mc['Wq']['valores']]  # Pasamos a minutos
+    valores_wq_minutos = [v * 60 for v in resultados_mc['Wq']['valores']]
     sns.histplot(valores_wq_minutos, kde=True, color='royalblue', bins=10, edgecolor='black')
     media_wq_m = resultados_mc['Wq']['media'] * 60
     plt.axvline(media_wq_m, color='crimson', linestyle='--', linewidth=2, label=f"Media μ: {media_wq_m:.2f} min")
@@ -62,13 +59,15 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # GRÁFICA 3: Curva de Capacidad (Wq promedio vs número de servidores c)
     # -------------------------------------------------------------------------
     plt.figure(figsize=(8, 5))
-    # SOLUCIÓN AL KEYERROR: Se evalúa 'estable' en lugar de 'stable'
-    c_estables = [c for c in lista_c if matriz_sensibilidad[c][10.0].get('estable', True)]
-    wq_minutos = [matriz_sensibilidad[c][10.0]['Wq'] * 60 for c in c_estables]
+    
+    # CORREGIDO: En vez del valor fijo 10.0, toma el primer elemento válido de lista_lambdas
+    lambda_referencia = lista_lambdas[0] if len(lista_lambdas) > 0 else 10.0
+    c_estables = [c for c in lista_c if matriz_sensibilidad[c][lambda_referencia].get('estable', True)]
+    wq_minutos = [matriz_sensibilidad[c][lambda_referencia]['Wq'] * 60 for c in c_estables]
     
     plt.plot(c_estables, wq_minutos, marker='o', markersize=8, color='firebrick', linewidth=2.5, label='Tiempo de Espera')
     plt.axhline(10.0, color='forestgreen', linestyle=':', linewidth=2, label='Umbral Límite Directivo (10 min)')
-    plt.title("Curva de Capacidad: Tiempo de Espera Wq vs Cantidad de Técnicos (λ = 10)", fontsize=12, fontweight='bold')
+    plt.title(f"Curva de Capacidad: Tiempo de Espera Wq vs Cantidad de Técnicos (λ = {lambda_referencia})", fontsize=12, fontweight='bold')
     plt.xlabel("Número de Técnicos Asignados (c)", fontsize=10)
     plt.ylabel("Wq Promedio (Minutos)", fontsize=10)
     plt.xticks(lista_c)
@@ -80,43 +79,3 @@ def generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_la
     # -------------------------------------------------------------------------
     # GRÁFICA 4: Factor de Utilización (ρ) vs Tasa de Llegada (λ)
     # -------------------------------------------------------------------------
-    plt.figure(figsize=(8, 5))
-    for c in lista_c:
-        # SOLUCIÓN ADICIONAL: Resguardo preventivo usando .get() para evitar caídas por llaves vacías
-        lambdas_validas = [lam for lam in lista_lambdas if matriz_sensibilidad[c][lam].get('estable', True)]
-        rhos = [matriz_sensibilidad[c][lam]['rho'] for lam in lambdas_validas]
-        plt.plot(lambdas_validas, rhos, marker='s', label=f"c = {c} Técnicos")
-    
-    plt.axhline(1.0, color='black', linestyle='--', alpha=0.7, label='Límite de Saturación (ρ = 1.0)')
-    plt.title("Factor de Utilización del Sistema (ρ) vs Tasa de Llegada (λ)", fontsize=12, fontweight='bold')
-    plt.xlabel("Tasa de Llegada λ (Clientes / Hora)", fontsize=10)
-    plt.ylabel("Factor de Utilización promedio (ρ)", fontsize=10)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(ruta_guardado, "grafica_4_utilizacion_rho.png"), dpi=150)
-    plt.close()
-
-    # -------------------------------------------------------------------------
-    # GRÁFICA 5: Heatmap del Análisis de Sensibilidad para Wq (Minutos)
-    # -------------------------------------------------------------------------
-    plt.figure(figsize=(9, 6))
-    grid_wq = np.zeros((len(lista_c), len(lista_lambdas)))
-    
-    for i, c in enumerate(lista_c):
-        for j, lam in enumerate(lista_lambdas):
-            val = matriz_sensibilidad[c][lam]['Wq']
-            grid_wq[i, j] = val * 60 if val is not None else np.nan
-
-    sns.heatmap(grid_wq, annot=True, fmt=".1f", cmap="YlOrRd", cbar=True,
-                xticklabels=[f"{lam} (Base)" if lam==10.0 else f"{lam} (+20%)" if lam==12.0 else f"{lam}" for lam in lista_lambdas], 
-                yticklabels=lista_c, mask=np.isnan(grid_wq),
-                cbar_kws={'label': 'Tiempo de Espera en Cola (Minutos)'}, annot_kws={'size': 11, 'weight': 'bold'})
-    
-    plt.title("Mapa de Calor: Wq en Minutos según Escenarios Operativos", fontsize=12, fontweight='bold')
-    plt.xlabel("Tasa de Llegada de Clientes λ (Clientes / Hora)", fontsize=10)
-    plt.ylabel("Número de Técnicos Disponibles (c)", fontsize=10)
-    plt.tight_layout()
-    plt.savefig(os.path.join(ruta_guardado, "grafica_5_heatmap_sensibilidad.png"), dpi=150)
-    plt.close()
-    
-    print("[INFO] ¡Las 5 gráficas profesionales han sido exportadas con éxito en formato PNG!")
