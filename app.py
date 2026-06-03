@@ -1,13 +1,14 @@
+# app.py
 import os
 import sys
 import math
 import numpy as np
-from flask import Flask, render_template_string, send_from_directory, request
+from flask import Flask, render_template_string, send_from_directory
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 # Configuración de rutas seguras para almacenamiento en la nube (Render)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(_file_))
 GRAFICAS_DIR = os.path.join(BASE_DIR, "static_graficas")
 
 if not os.path.exists(GRAFICAS_DIR):
@@ -15,18 +16,85 @@ if not os.path.exists(GRAFICAS_DIR):
 
 # Capturador de logs clásicos de consola
 class CapturaConsola:
-    def __init__(self):
+    def _init_(self):
         self.texto = ""
     def write(self, string):
         self.texto += string
     def flush(self):
         pass
 
-# Importamos las funciones, variables y listas base de tu simulación real
+old_stdout = sys.stdout
+captura = CapturaConsola()
+sys.stdout = captura
+
+# Ejecutamos el núcleo de tu simulación real
 from main import main, LAMBDA_BASE, MU_BASE, C_BASE, T_SIM_HORAS, T_WARM_HORAS, N_REPLICAS, SEMILLA_BASE, lista_lambdas, lista_c
+main() 
+
+sys.stdout = old_stdout
+REPORTE_TEXTO = captura.texto
+
+# Importamos módulos matemáticos y de graficación
 import montecarlo
 import sensibilidad
 from visualizacion import generar_graficas
+
+# Corremos los motores para obtener los diccionarios de datos completos
+resultados_mc, datos_ejemplo = montecarlo.correr_replicas(N_REPLICAS, SEMILLA_BASE, LAMBDA_BASE, MU_BASE, C_BASE, T_SIM_HORAS, T_WARM_HORAS)
+matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(N_REPLICAS, SEMILLA_BASE, lista_lambdas, lista_c, MU_BASE, T_SIM_HORAS, T_WARM_HORAS)
+
+# Regeneramos las 5 gráficas en la ruta estática
+generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c, ruta_guardado=GRAFICAS_DIR)
+
+# =========================================================================
+# 📊 PROCESAMIENTO ESTADÍSTICO AVANZADO SEGÚN LA GUÍA
+# =========================================================================
+
+# 1. Valores Simulados (Medias directas de Montecarlo)
+rho_sim = resultados_mc['rho']['media']
+lq_sim  = resultados_mc['Lq']['media']
+wq_sim  = resultados_mc['Wq']['media']  # En horas
+
+# Extensiones de la Ley de Little para el Sistema Completo (L y W)
+l_sim   = lq_sim + (LAMBDA_BASE / MU_BASE)
+w_sim   = wq_sim + (1 / MU_BASE)
+
+# 2. Valores Teóricos Analíticos Exactos (Modelo M/M/c)
+rho_teo = LAMBDA_BASE / (C_BASE * MU_BASE)
+
+# Sumatoria para P0 (Probabilidad de sistema vacío)
+suma_p0 = sum([(LAMBDA_BASE / MU_BASE)**n / math.factorial(n) for n in range(C_BASE)])
+suma_p0 += ((LAMBDA_BASE / MU_BASE)**C_BASE / (math.factorial(C_BASE) * (1 - rho_teo)))
+p0_teo = 1 / suma_p0
+
+# Métricas del Marco Teórico
+lq_teo = (p0_teo * ((LAMBDA_BASE / MU_BASE)*C_BASE) * rho_teo) / (math.factorial(C_BASE) * ((1 - rho_teo)*2))
+wq_teo = lq_teo / LAMBDA_BASE
+l_teo  = lq_teo + (LAMBDA_BASE / MU_BASE)
+w_teo  = wq_teo + (1 / MU_BASE)
+
+# 3. Errores Relativos Porcentuales (%) - Sección 5.4 de la Guía
+err_rho = abs(rho_teo - rho_sim) / rho_teo * 100
+err_lq  = abs(lq_teo - lq_sim) / lq_teo * 100 if lq_teo > 0 else 0
+err_wq  = abs(wq_teo - wq_sim) / wq_teo * 100 if wq_teo > 0 else 0
+err_l   = abs(l_teo - l_sim) / l_teo * 100 if l_teo > 0 else 0
+err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
+
+# 4. Intervalos de Confianza al 95% 
+wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60  # Minutos
+lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
+rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
+
+# 5. Cálculo del Número Mínimo de Réplicas (Módulo 3 - Requerimiento 5.3)
+# Fórmula: N_min = ( (z_alpha/2 * S) / (E * X_barra) )^2  donde E = 0.05 (error 5%)
+valores_wq = resultados_mc['Wq']['valores']
+media_wq = np.mean(valores_wq)
+desviacion_wq = np.std(valores_wq, ddof=1)
+if media_wq > 0:
+    n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2
+    n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
+else:
+    n_minimo_calculado = 30
 
 # =========================================================================
 # 🎨 DISEÑO DE DASHBOARD DE ALTO IMPACTO VISUAL
@@ -44,16 +112,6 @@ HTML_TEMPLATE = """
         .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 30px; }
         h2 { color: #ffffff; font-size: 20px; font-weight: 600; margin-top: 45px; margin-bottom: 20px; display: flex; align-items: center; }
         h2::before { content: "■"; color: #00f2fe; margin-right: 10px; font-size: 14px; }
-        
-        /* Panel de Parametrización Dinámica */
-        .panel-control { background: #111827; border: 1px solid #1e293b; padding: 22px; border-radius: 12px; margin-bottom: 35px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; align-items: flex-end; }
-        .form-group { display: flex; flex-direction: column; }
-        .form-group label { font-size: 11px; color: #94a3b8; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .form-group input { background: #1e293b; border: 1px solid #334155; color: #ffffff; padding: 10px; border-radius: 6px; font-size: 14px; font-family: monospace; }
-        .form-group input:focus { border-color: #00d2ff; outline: none; }
-        .btn-submit { background: linear-gradient(90deg, #00f2fe, #4facfe); border: none; color: #ffffff; font-weight: 700; font-size: 13px; padding: 11px; border-radius: 6px; cursor: pointer; transition: transform 0.2s; text-transform: uppercase; letter-spacing: 0.05em; }
-        .btn-submit:hover { transform: scale(1.02); }
         
         /* Grid de KPIs principales */
         .grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 35px; }
@@ -92,34 +150,6 @@ HTML_TEMPLATE = """
     <div class="container">
         <h1>TechClassUC: Panel de Simulación Avanzada</h1>
         <div class="subtitle"><strong>Cumplimiento de Requerimientos:</strong> Entorno Web para Validación de Modelos Estocásticos</div>
-        
-        <div class="panel-control">
-            <form method="POST" action="/">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Tasa de Llegada (λ)</label>
-                        <input type="number" step="0.01" name="lambda_base" value="{{ lam_b }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Capacidad Servicio (μ)</label>
-                        <input type="number" step="0.01" name="mu_base" value="{{ mu_b }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Nº Técnicos (c)</label>
-                        <input type="number" min="1" name="c_base" value="{{ c_b }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Jornada Horas (T)</label>
-                        <input type="number" min="1" name="t_sim" value="{{ t_sim }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Réplicas Montecarlo (N)</label>
-                        <input type="number" min="2" name="n_replicas" value="{{ n_replicas }}" required>
-                    </div>
-                    <button type="submit" class="btn-submit">🚀 Ejecutar</button>
-                </div>
-            </form>
-        </div>
         
         <h2>Métricas de Desempeño Global (Montecarlo)</h2>
         <div class="grid-kpis">
@@ -232,96 +262,8 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def home():
-    # 1. Ajustamos las variables por defecto usando los parámetros de main.py
-    lambda_actual = LAMBDA_BASE
-    mu_actual = MU_BASE
-    c_actual = C_BASE
-    t_sim_actual = T_SIM_HORAS
-    n_replicas_actual = N_REPLICAS
-    semilla_actual = SEMILLA_BASE
-    t_warm_actual = T_WARM_HORAS
-
-    # 2. Si hay un envío por el formulario, recolectamos los valores que ingresaste
-    if request.method == 'POST':
-        lambda_actual = float(request.form.get('lambda_base', LAMBDA_BASE))
-        mu_actual = float(request.form.get('mu_base', MU_BASE))
-        c_actual = int(request.form.get('c_base', C_BASE))
-        t_sim_actual = int(request.form.get('t_sim', T_SIM_HORAS))
-        n_replicas_actual = int(request.form.get('n_replicas', N_REPLICAS))
-
-    # 3. Lanzamos el capturador clásico para tus logs dinámicos
-    old_stdout = sys.stdout
-    captura = CapturaConsola()
-    sys.stdout = captura
-
-    # Ejecutamos el núcleo de simulación con tus parámetros dinámicos
-    resultados_mc, datos_ejemplo = montecarlo.correr_replicas(
-        n_replicas_actual, semilla_actual, lambda_actual, mu_actual, c_actual, t_sim_actual, t_warm_actual
-    )
-    
-    matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(
-        n_replicas_actual, semilla_actual, lista_lambdas, lista_c, mu_actual, t_sim_actual, t_warm_actual
-    )
-
-    # Regeneramos las 5 gráficas en la ruta estática con los datos calculados
-    generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c, ruta_guardado=GRAFICAS_DIR)
-
-    sys.stdout = old_stdout
-    REPORTE_TEXTO = captura.texto
-
-    # =========================================================================
-    # 📊 PROCESAMIENTO ESTADÍSTICO AVANZADO CON PARÁMETROS DINÁMICOS
-    # =========================================================================
-    rho_sim = resultados_mc['rho']['media']
-    lq_sim  = resultados_mc['Lq']['media']
-    wq_sim  = resultados_mc['Wq']['media']  # En horas
-
-    l_sim   = lq_sim + (lambda_actual / mu_actual)
-    w_sim   = wq_sim + (1 / mu_actual)
-
-    # Valores Teóricos Analíticos Exactos (Modelo M/M/c)
-    rho_teo = lambda_actual / (c_actual * mu_actual)
-
-    # Validación analítica matemática para evitar desbordamientos si rho >= 1
-    if rho_teo < 1:
-        suma_p0 = sum([(lambda_actual / mu_actual)**n / math.factorial(n) for n in range(c_actual)])
-        suma_p0 += ((lambda_actual / mu_actual)**c_actual / (math.factorial(c_actual) * (1 - rho_teo)))
-        p0_teo = 1 / suma_p0
-
-        lq_teo = (p0_teo * ((lambda_actual / mu_actual)**c_actual) * rho_teo) / (math.factorial(c_actual) * ((1 - rho_teo)**2))
-        wq_teo = lq_teo / lambda_actual
-        l_teo  = lq_teo + (lambda_actual / mu_actual)
-        w_teo  = wq_teo + (1 / mu_actual)
-    else:
-        # Valores de bandera en caso de saturación total del sistema
-        p0_teo = 0.0
-        lq_teo = wq_teo = l_teo = w_teo = 99.99
-
-    # Errores Relativos Porcentuales (%)
-    err_rho = abs(rho_teo - rho_sim) / rho_teo * 100 if rho_teo > 0 else 0
-    err_lq  = abs(lq_teo - lq_sim) / lq_teo * 100 if lq_teo > 0 else 0
-    err_wq  = abs(wq_teo - wq_sim) / wq_teo * 100 if wq_teo > 0 else 0
-    err_l   = abs(l_teo - l_sim) / l_teo * 100 if l_teo > 0 else 0
-    err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
-
-    # Intervalos de Confianza al 95% 
-    wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60  # Minutos
-    lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
-    rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
-
-    # Cálculo del Número Mínimo de Réplicas (Módulo 3 - Requerimiento 5.3)
-    valores_wq = resultados_mc['Wq']['valores']
-    media_wq = np.mean(valores_wq)
-    desviacion_wq = np.std(valores_wq, ddof=1)
-    if media_wq > 0:
-        n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2
-        n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
-    else:
-        n_minimo_calculado = 30
-
-    # 4. Renderizamos la plantilla HTML inyectando las nuevas variables dinámicas
     return render_template_string(
         HTML_TEMPLATE, 
         reporte=REPORTE_TEXTO,
@@ -331,14 +273,14 @@ def home():
         wq_ic_inf=wq_ic_inf, wq_ic_sup=wq_ic_sup,
         lq_ic_inf=lq_ic_inf, lq_ic_sup=lq_ic_sup,
         rho_ic_inf=rho_ic_inf, rho_ic_sup=rho_ic_sup,
-        n_replicas=n_replicas_actual, lam_b=lambda_actual, mu_b=mu_actual, c_b=c_actual,
-        t_sim=t_sim_actual, n_min=n_minimo_calculado
+        n_replicas=N_REPLICAS, lam_b=LAMBDA_BASE, mu_b=MU_BASE, c_b=C_BASE,
+        n_min=n_minimo_calculado
     )
 
 @app.route('/graficas/<filename>')
 def obtener_grafica(filename):
     return send_from_directory(GRAFICAS_DIR, filename)
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
