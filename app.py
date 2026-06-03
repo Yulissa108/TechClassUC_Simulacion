@@ -5,10 +5,10 @@ import math
 import numpy as np
 from flask import Flask, render_template_string, send_from_directory
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Configuración de rutas seguras para almacenamiento en la nube (Render)
-BASE_DIR = os.path.dirname(os.path.abspath(_file_))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GRAFICAS_DIR = os.path.join(BASE_DIR, "static_graficas")
 
 if not os.path.exists(GRAFICAS_DIR):
@@ -16,7 +16,7 @@ if not os.path.exists(GRAFICAS_DIR):
 
 # Capturador de logs clásicos de consola
 class CapturaConsola:
-    def _init_(self):
+    def __init__(self):
         self.texto = ""
     def write(self, string):
         self.texto += string
