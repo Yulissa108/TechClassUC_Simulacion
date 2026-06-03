@@ -5,6 +5,7 @@ import math
 import numpy as np
 from flask import Flask, render_template_string, send_from_directory
 
+# CORREGIDO: Uso de doble guion bajo estándar __name__
 app = Flask(__name__)
 
 # Configuración de rutas seguras para almacenamiento en la nube (Render)
@@ -68,7 +69,7 @@ suma_p0 += ((LAMBDA_BASE / MU_BASE)**C_BASE / (math.factorial(C_BASE) * (1 - rho
 p0_teo = 1 / suma_p0
 
 # Métricas del Marco Teórico
-lq_teo = (p0_teo * ((LAMBDA_BASE / MU_BASE)*C_BASE) * rho_teo) / (math.factorial(C_BASE) * ((1 - rho_teo)*2))
+lq_teo = (p0_teo * ((LAMBDA_BASE / MU_BASE)**C_BASE) * rho_teo) / (math.factorial(C_BASE) * ((1 - rho_teo)**2))
 wq_teo = lq_teo / LAMBDA_BASE
 l_teo  = lq_teo + (LAMBDA_BASE / MU_BASE)
 w_teo  = wq_teo + (1 / MU_BASE)
@@ -83,10 +84,9 @@ err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
 # 4. Intervalos de Confianza al 95% 
 wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60  # Minutos
 lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
-rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
+rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, whites_ic_sup = resultados_mc['rho']['ic_sup'] * 100
 
 # 5. Cálculo del Número Mínimo de Réplicas (Módulo 3 - Requerimiento 5.3)
-# Fórmula: N_min = ( (z_alpha/2 * S) / (E * X_barra) )^2  donde E = 0.05 (error 5%)
 valores_wq = resultados_mc['Wq']['valores']
 media_wq = np.mean(valores_wq)
 desviacion_wq = np.std(valores_wq, ddof=1)
@@ -281,6 +281,7 @@ def home():
 def obtener_grafica(filename):
     return send_from_directory(GRAFICAS_DIR, filename)
 
-if _name_ == '_main_':
+# CORREGIDO: Uso de la sintaxis dunder correcta de Python para el arranque
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
