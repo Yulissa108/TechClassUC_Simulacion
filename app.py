@@ -232,15 +232,26 @@ def home():
         error_msg = f"Aviso de Saturación: El sistema es inestable porque la tasa de llegada (λ={lam}) es mayor o igual que la capacidad máxima de atención (c*μ={c*mu}). Las colas crecerán indefinidamente."
 
     # =========================================================================
-    # EJECUCIÓN CON CONTENCIÓN DE ERRORES MATEMÁTICOS
+    # EJECUCIÓN CON CONTENCIÓN DE ERRORES MATEMÁTICOS (BLINDADO CONTRA TIMEOUT)
     # =========================================================================
+    # Control dinámico del tiempo de simulación si el sistema se encuentra colapsado
+    tiempo_sim_seguro = main.T_SIM_HORAS
+    if lam >= (c * mu):
+        tiempo_sim_seguro = min(1.5, main.T_SIM_HORAS)  # Freno de mano: reduce horas si colapsa
+        error_msg = f"Aviso de Saturación Crítica: El sistema es inestable (λ={lam} >= c*μ={c*mu}). Se acortó el tiempo simulado para proteger el servidor."
+
     try:
-        resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, main.T_SIM_HORAS, main.T_WARM_HORAS)
+        # Corremos la simulación Montecarlo con tiempo seguro
+        resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, tiempo_sim_seguro, main.T_WARM_HORAS)
         
-        lista_lambdas_dinamica = [max(0.5, lam - 2), lam, lam + 2, lam + 4]
+        # Evitamos que los escenarios de sensibilidad escalen a valores infinitos de clientes
+        lista_lambdas_dinamica = [max(0.5, lam - 2), lam, min(lam + 1, c*mu + 1), min(lam + 2, c*mu + 2)]
         lista_c_dinamica = [max(1, c - 1), c, c + 1, c + 2]
         
-        matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, main.T_SIM_HORAS, main.T_WARM_HORAS)
+        # Si el sistema está colapsado, reducimos réplicas en la matriz para agilizar la carga
+        n_sensibilidad = min(5, n) if lam >= (c * mu) else n
+        
+        matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n_sensibilidad, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, tiempo_sim_seguro, main.T_WARM_HORAS)
         generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas_dinamica, lista_c_dinamica, ruta_guardado=GRAFICAS_DIR)
 
         rho_sim = resultados_mc['rho']['media']
