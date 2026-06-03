@@ -3,111 +3,49 @@ import os
 import sys
 import math
 import numpy as np
-from flask import Flask, render_template_string, send_from_directory
+from flask import Flask, render_template_string, send_from_directory, request
 
-# Inicialización de la App con la sintaxis corregida dunder
 app = Flask(__name__)
 
-# Configuración de rutas estáticas para Render
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GRAFICAS_DIR = os.path.join(BASE_DIR, "static_graficas")
 
 if not os.path.exists(GRAFICAS_DIR):
     os.makedirs(GRAFICAS_DIR)
 
-# Capturador de logs de consola
-class CapturaConsola:
-    def __init__(self):
-        self.texto = ""
-    def write(self, string):
-        self.texto += string
-    def flush(self):
-        pass
-
-old_stdout = sys.stdout
-captura = CapturaConsola()
-sys.stdout = captura
-
-# Ejecución del núcleo de la simulación
-from main import main, LAMBDA_BASE, MU_BASE, C_BASE, T_SIM_HORAS, T_WARM_HORAS, N_REPLICAS, SEMILLA_BASE, lista_lambdas, lista_c
-main() 
-
-sys.stdout = old_stdout
-REPORTE_TEXTO = captura.texto
-
-# Importación de módulos del proyecto
+# Importamos las variables base como valores por defecto iniciales
+import main
 import montecarlo
 import sensibilidad
 from visualizacion import generar_graficas
 
-# Obtención de datos reales de simulación
-resultados_mc, datos_ejemplo = montecarlo.correr_replicas(N_REPLICAS, SEMILLA_BASE, LAMBDA_BASE, MU_BASE, C_BASE, T_SIM_HORAS, T_WARM_HORAS)
-matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(N_REPLICAS, SEMILLA_BASE, lista_lambdas, lista_c, MU_BASE, T_SIM_HORAS, T_WARM_HORAS)
-
-# Renderizado de gráficas en el directorio estático
-generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas, lista_c, ruta_guardado=GRAFICAS_DIR)
-
 # =========================================================================
-# 📊 PROCESAMIENTO ESTADÍSTICO DINÁMICO
-# =========================================================================
-
-# 1. Medias Directas de la Simulación (Montecarlo)
-rho_sim = resultados_mc['rho']['media']
-lq_sim  = resultados_mc['Lq']['media']
-wq_sim  = resultados_mc['Wq']['media']  # Horas
-
-l_sim   = lq_sim + (LAMBDA_BASE / MU_BASE)
-w_sim   = wq_sim + (1 / MU_BASE)
-
-# 2. Valores Analíticos Teóricos (M/M/c)
-rho_teo = LAMBDA_BASE / (C_BASE * MU_BASE)
-
-suma_p0 = sum([(LAMBDA_BASE / MU_BASE)**n / math.factorial(n) for n in range(C_BASE)])
-suma_p0 += ((LAMBDA_BASE / MU_BASE)**C_BASE / (math.factorial(C_BASE) * (1 - rho_teo)))
-p0_teo = 1 / suma_p0
-
-lq_teo = (p0_teo * ((LAMBDA_BASE / MU_BASE)**C_BASE) * rho_teo) / (math.factorial(C_BASE) * ((1 - rho_teo)**2))
-wq_teo = lq_teo / LAMBDA_BASE
-l_teo  = lq_teo + (LAMBDA_BASE / MU_BASE)
-w_teo  = wq_teo + (1 / MU_BASE)
-
-# 3. Errores Relativos Porcentuales
-err_rho = abs(rho_teo - rho_sim) / rho_teo * 100
-err_lq  = abs(lq_teo - lq_sim) / lq_teo * 100 if lq_teo > 0 else 0
-err_wq  = abs(wq_teo - wq_sim) / wq_teo * 100 if wq_teo > 0 else 0
-err_l   = abs(l_teo - l_sim) / l_teo * 100 if l_teo > 0 else 0
-err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
-
-# 4. Intervalos de Confianza (Pasados a minutos y porcentajes según corresponda)
-wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60
-lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
-rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
-
-# 5. Estabilización de Réplicas (Mínimo requerido)
-valores_wq = resultados_mc['Wq']['valores']
-media_wq = np.mean(valores_wq)
-desviacion_wq = np.std(valores_wq, ddof=1)
-if media_wq > 0:
-    n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2
-    n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
-else:
-    n_minimo_calculado = 30
-
-# =========================================================================
-# 🎨 VARIABLE HTML TOTALMENTE ENLAZADA CON JINJA2
+# 🎨 DISEÑO DE DASHBOARD INTERACTIVO (FORMULARIO + RESULTADOS)
 # =========================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>TechClassUC - Panel de Simulación</title>
+    <title>TechClassUC - Simulador Dinámico de Colas</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 40px; background-color: #0b0f19; color: #f4f6f9; }
         .container { max-width: 1200px; margin: auto; }
-        h1 { color: #00d2ff; font-size: 26px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; }
-        h2 { color: #ffffff; font-size: 18px; margin-top: 40px; }
+        h1 { color: #00d2ff; font-size: 26px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 25px; }
+        h2 { color: #ffffff; font-size: 18px; margin-top: 40px; border-left: 4px solid #00f2fe; padding-left: 10px; }
+        p { color: #94a3b8; }
         
+        /* Estilos del Formulario Superior */
+        .form-container { background: #151f32; border: 1px solid #1e293b; padding: 25px; border-radius: 12px; margin-bottom: 35px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 12px; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+        .form-group input { background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 6px; color: #ffffff; font-size: 15px; font-weight: bold; }
+        .form-group input:focus { border-color: #00f2fe; outline: none; }
+        .btn-simular { background: linear-gradient(90deg, #00f2fe, #4facfe); border: none; color: #0b0f19; font-size: 16px; font-weight: 700; padding: 12px 30px; border-radius: 8px; cursor: pointer; transition: 0.3s; width: 100%; text-transform: uppercase; }
+        .btn-simular:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,242,254,0.4); }
+
+        /* KPIS y Tablas */
         .grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .card-kpi { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; }
         .card-kpi h3 { margin: 0; color: #94a3b8; font-size: 11px; text-transform: uppercase; }
@@ -124,15 +62,40 @@ HTML_TEMPLATE = """
 
         .grid-graficas { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .card-grafica { background: #1e293b; border: 1px solid #334155; padding: 15px; border-radius: 12px; text-align: center; }
-        .card-grafica img { max-width: 100%; height: auto; border-radius: 8px; }
+        .card-grafica img { max-width: 100%; height: auto; border-radius: 8px; background-color: white; }
         .full-width { grid-column: span 2; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>TechClassUC: Panel de Simulación Avanzada</h1>
-        <p style="color: #94a3b8;">Entorno Web para Validación de Modelos Estocásticos</p>
         
+        <div class="form-container">
+            <form method="POST" action="/">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Tasa de Llegada (&lambda;)</label>
+                        <input type="number" step="0.01" name="lambda_val" value="{{ inputs.lam }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tasa de Servicio (&mu;)</label>
+                        <input type="number" step="0.01" name="mu_val" value="{{ inputs.mu }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Servidores / Canales (c)</label>
+                        <input type="number" name="c_val" value="{{ inputs.c }}" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Número de Réplicas (N)</label>
+                        <input type="number" name="n_replicas" value="{{ inputs.n }}" min="2" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-simular">⚡ Ejecutar Simulación Dinámica</button>
+            </form>
+        </div>
+
+        <p style="color: #34d399; font-weight: bold;">✓ Mostrando resultados para: &lambda;={{inputs.lam}}, &mu;={{inputs.mu}}, c={{inputs.c}}, N={{inputs.n}}</p>
+
         <h2>Métricas de Desempeño Global (Montecarlo)</h2>
         <div class="grid-kpis">
             <div class="card-kpi">
@@ -151,19 +114,19 @@ HTML_TEMPLATE = """
                 <div class="ic-box">IC: [{{ rho_ic_inf | round(1) }}%, {{ rho_ic_sup | round(1) }}%]</div>
             </div>
             <div class="card-kpi">
-                <h3>Muestreo Corridas</h3>
-                <div class="value" style="color: #34d399;">N = {{ n_replicas }}</div>
+                <h3>Estabilización</h3>
+                <div class="value" style="color: #34d399; font-size: 22px; margin-top: 5px;">Muestras: {{ inputs.n }}</div>
                 <div class="ic-box" style="color: #a7f3d0;">N Mínimo Requerido: {{ n_min }}</div>
             </div>
         </div>
 
-        <h2>Módulo 4: Tabla de Validación Analítica (M/M/c vs Simulación)</h2>
+        <h2>Módulo 4: Tabla de Validación Analítica ($M/M/c$ vs Simulación)</h2>
         <div class="table-responsive">
             <table>
                 <thead>
                     <tr>
                         <th>Métrica del Sistema</th>
-                        <th>Modelo Teórico (M/M/c)</th>
+                        <th>Modelo Teórico ($M/M/c$)</th>
                         <th>Simulación (Media)</th>
                         <th>Intervalo de Confianza (95%)</th>
                         <th>Error Relativo %</th>
@@ -209,27 +172,27 @@ HTML_TEMPLATE = """
             </table>
         </div>
         
-        <h2>Módulo 5 y 6: Tablero de Gráficas Estadísticas</h2>
+        <h2>Módulo 5 y 6: Tablero de Gráficas Estadísticas (Dinámicas)</h2>
         <div class="grid-graficas">
             <div class="card-grafica full-width">
                 <h3>Análisis de Sensibilidad: Mapa de Calor (Wq Minutos)</h3>
-                <img src="/graficas/grafica_5_heatmap_sensibilidad.png" alt="Heatmap">
+                <img src="/graficas/grafica_5_heatmap_sensibilidad.png?v={{ r_id }}" alt="Heatmap">
             </div>
             <div class="card-grafica">
                 <h3>Curva de Capacidad: Wq vs Técnicos (c)</h3>
-                <img src="/graficas/grafica_3_capacidad_wq.png" alt="Capacidad">
+                <img src="/graficas/grafica_3_capacidad_wq.png?v={{ r_id }}" alt="Capacidad">
             </div>
             <div class="card-grafica">
                 <h3>Factor de Utilización (&rho;) vs Tasa de Llegada (&lambda;)</h3>
-                <img src="/graficas/grafica_4_utilizacion_rho.png" alt="Utilización">
+                <img src="/graficas/grafica_4_utilizacion_rho.png?v={{ r_id }}" alt="Utilización">
             </div>
             <div class="card-grafica">
                 <h3>Evolución Temporal (SimPy)</h3>
-                <img src="/graficas/grafica_1_evolucion_temporal.png" alt="Evolución">
+                <img src="/graficas/grafica_1_evolucion_temporal.png?v={{ r_id }}" alt="Evolución">
             </div>
             <div class="card-grafica">
                 <h3>Verificación Teorema Central del Límite</h3>
-                <img src="/graficas/grafica_2_distribucion_wq.png" alt="TCL">
+                <img src="/graficas/grafica_2_distribucion_wq.png?v={{ r_id }}" alt="TCL">
             </div>
         </div>
     </div>
@@ -237,17 +200,93 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def home():
+    # Asignamos los valores por defecto iniciales de main.py
+    lam = main.LAMBDA_BASE
+    mu = main.MU_BASE
+    c = main.C_BASE
+    n = main.N_REPLICAS
+
+    # Si el usuario presiona el botón, capturamos lo que escribió en las cajitas
+    if request.method == 'POST':
+        try:
+            lam = float(request.form.get('lambda_val', lam))
+            mu = float(request.form.get('mu_val', mu))
+            c = int(request.form.get('c_val', c))
+            n = int(request.form.get('n_replicas', n))
+        except ValueError:
+            pass
+
+    # =========================================================================
+    # EJECUCIÓN DEL MOTOR MATEMÁTICO EN TIEMPO REAL
+    # =========================================================================
+    resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, main.T_SIM_HORAS, main.T_WARM_HORAS)
+    
+    # Adaptación dinámica de listas para el análisis de sensibilidad según las entradas
+    lista_lambdas_dinamica = [max(0.5, lam - 2), lam, lam + 2, lam + 4]
+    lista_c_dinamica = [max(1, c - 1), c, c + 1, c + 2]
+    
+    matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, main.T_SIM_HORAS, main.T_WARM_HORAS)
+    
+    # Forzamos la regeneración de los archivos de imagen (.png) con los nuevos datos
+    generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas_dinamica, lista_c_dinamica, ruta_guardado=GRAFICAS_DIR)
+
+    # Cálculos estadísticos
+    rho_sim = resultados_mc['rho']['media']
+    lq_sim  = resultados_mc['Lq']['media']
+    wq_sim  = resultados_mc['Wq']['media']
+    l_sim   = lq_sim + (lam / mu)
+    w_sim   = wq_sim + (1 / mu)
+
+    # Analítico Teórico
+    rho_teo = lam / (c * mu)
+    if rho_teo >= 1:
+        # Prevención de colapso si la utilización teórica satura el sistema (rho >= 1)
+        rho_teo = 0.9999
+
+    suma_p0 = sum([(lam / mu)**i / math.factorial(i) for i in range(c)])
+    suma_p0 += ((lam / mu)**c / (math.factorial(c) * (1 - rho_teo)))
+    p0_teo = 1 / suma_p0 if suma_p0 > 0 else 0.001
+
+    lq_teo = (p0_teo * ((lam / mu)**c) * rho_teo) / (math.factorial(c) * ((1 - rho_teo)**2))
+    wq_teo = lq_teo / lam if lam > 0 else 0
+    l_teo  = lq_teo + (lam / mu)
+    w_teo  = wq_teo + (1 / mu)
+
+    # Errores relativos
+    err_rho = abs(rho_teo - rho_sim) / rho_teo * 100
+    err_lq  = abs(lq_teo - lq_sim) / lq_teo * 100 if lq_teo > 0 else 0
+    err_wq  = abs(wq_teo - wq_sim) / wq_teo * 100 if wq_teo > 0 else 0
+    err_l   = abs(l_teo - l_sim) / l_teo * 100 if l_teo > 0 else 0
+    err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
+
+    # Intervalos
+    wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60
+    lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
+    rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
+
+    # N Mínimo
+    valores_wq = resultados_mc['Wq']['valores']
+    media_wq = np.mean(valores_wq)
+    desviacion_wq = np.std(valores_wq, ddof=1)
+    n_minimo_calculado = ((1.96 * desviacion_wq) / (0.05 * media_wq)) ** 2 if media_wq > 0 else 30
+    n_minimo_calculado = max(10, math.ceil(n_minimo_calculado))
+
+    # ID aleatorio para forzar al navegador a no guardar en caché las imágenes generadas
+    import random
+    rand_id = random.randint(1, 99999)
+
     return render_template_string(
-        HTML_TEMPLATE, 
+        HTML_TEMPLATE,
+        inputs={'lam': lam, 'mu': mu, 'c': c, 'n': n},
         rho_sim=rho_sim, lq_sim=lq_sim, wq_sim=wq_sim, l_sim=l_sim, w_sim=w_sim,
         rho_teo=rho_teo, lq_teo=lq_teo, wq_teo=wq_teo, l_teo=l_teo, w_teo=w_teo,
         err_rho=err_rho, err_lq=err_lq, err_wq=err_wq, err_l=err_l, err_w=err_w,
         wq_ic_inf=wq_ic_inf, wq_ic_sup=wq_ic_sup,
         lq_ic_inf=lq_ic_inf, lq_ic_sup=lq_ic_sup,
         rho_ic_inf=rho_ic_inf, rho_ic_sup=rho_ic_sup,
-        n_replicas=N_REPLICAS, n_min=n_minimo_calculado
+        n_min=n_minimo_calculado, r_id=rand_id
     )
 
 @app.route('/graficas/<filename>')
