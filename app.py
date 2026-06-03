@@ -5,7 +5,7 @@ import math
 import numpy as np
 from flask import Flask, render_template_string, send_from_directory
 
-# CORREGIDO: Uso de doble guion bajo estándar __name__
+# CORREGIDO: Uso de doble guion bajo estándar __name__ para evitar el NameError en producción
 app = Flask(__name__)
 
 # Configuración de rutas seguras para almacenamiento en la nube (Render)
@@ -84,7 +84,7 @@ err_w   = abs(w_teo - w_sim) / w_teo * 100 if w_teo > 0 else 0
 # 4. Intervalos de Confianza al 95% 
 wq_ic_inf, wq_ic_sup = resultados_mc['Wq']['ic_inf'] * 60, resultados_mc['Wq']['ic_sup'] * 60  # Minutos
 lq_ic_inf, lq_ic_sup = resultados_mc['Lq']['ic_inf'], resultados_mc['Lq']['ic_sup']
-rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, whites_ic_sup = resultados_mc['rho']['ic_sup'] * 100
+rho_ic_inf, rho_ic_sup = resultados_mc['rho']['ic_inf'] * 100, resultados_mc['rho']['ic_sup'] * 100
 
 # 5. Cálculo del Número Mínimo de Réplicas (Módulo 3 - Requerimiento 5.3)
 valores_wq = resultados_mc['Wq']['valores']
@@ -113,7 +113,6 @@ HTML_TEMPLATE = """
         h2 { color: #ffffff; font-size: 20px; font-weight: 600; margin-top: 45px; margin-bottom: 20px; display: flex; align-items: center; }
         h2::before { content: "■"; color: #00f2fe; margin-right: 10px; font-size: 14px; }
         
-        /* Grid de KPIs principales */
         .grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 35px; }
         .card-kpi { background: #1e293b; border: 1px solid #334155; padding: 22px 18px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .card-kpi h3 { margin: 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -124,7 +123,6 @@ HTML_TEMPLATE = """
         .progress-bar-bg { background: #334155; border-radius: 4px; height: 6px; width: 100%; margin-top: 15px; }
         .progress-bar-fill { background: linear-gradient(90deg, #00f2fe, #4facfe); height: 100%; border-radius: 4px; width: {{ (rho_sim * 100) | round(1) }}%; }
 
-        /* Estilos de Tablas Científicas */
         .table-responsive { width: 100%; overflow-x: auto; margin-bottom: 40px; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         table { width: 100%; border-collapse: collapse; text-align: left; background-color: #1e293b; }
         th { background-color: #0f172a; color: #38bdf8; padding: 14px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #334155; }
@@ -134,7 +132,6 @@ HTML_TEMPLATE = """
         .badge-error.high { background-color: rgba(239, 68, 68, 0.15); color: #f87171; }
         .font-mono { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
 
-        /* Contenedor de Gráficas */
         .grid-graficas { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px; margin-bottom: 50px; }
         .card-grafica { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .card-grafica h3 { margin-top: 0; margin-bottom: 15px; color: #ffffff; font-size: 15px; font-weight: 600; }
@@ -281,7 +278,7 @@ def home():
 def obtener_grafica(filename):
     return send_from_directory(GRAFICAS_DIR, filename)
 
-# CORREGIDO: Uso de la sintaxis dunder correcta de Python para el arranque
+# CORREGIDO: Bloque de control de ejecución con la sintaxis dunder original (__name__ == '__main__')
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
