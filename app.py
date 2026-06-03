@@ -237,22 +237,35 @@ def home():
     # Control dinámico del tiempo de simulación si el sistema se encuentra colapsado
     tiempo_sim_seguro = main.T_SIM_HORAS
     if lam >= (c * mu):
-        tiempo_sim_seguro = min(1.5, main.T_SIM_HORAS)  # Freno de mano: reduce horas si colapsa
+        tiempo_sim_seguro = min(1.0, main.T_SIM_HORAS)  # Bajamos el tiempo máximo a 1 hora si colapsa
         error_msg = f"Aviso de Saturación Crítica: El sistema es inestable (λ={lam} >= c*μ={c*mu}). Se acortó el tiempo simulado para proteger el servidor."
 
     try:
+        # Configuración segura de Matplotlib para no bloquear la app
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
         # Corremos la simulación Montecarlo con tiempo seguro
         resultados_mc, datos_ejemplo = montecarlo.correr_replicas(n, main.SEMILLA_BASE, lam, mu, c, tiempo_sim_seguro, main.T_WARM_HORAS)
         
-        # Evitamos que los escenarios de sensibilidad escalen a valores infinitos de clientes
-        lista_lambdas_dinamica = [max(0.5, lam - 2), lam, min(lam + 1, c*mu + 1), min(lam + 2, c*mu + 2)]
-        lista_c_dinamica = [max(1, c - 1), c, c + 1, c + 2]
+        # Evitamos que los escenarios de sensibilidad escalen a rangos infinitos
+        lista_lambdas_dinamica = [max(0.5, lam - 1.5), lam, min(lam + 1, c*mu + 1)]
+        lista_c_dinamica = [max(1, c - 1), c, c + 1]
         
-        # Si el sistema está colapsado, reducimos réplicas en la matriz para agilizar la carga
-        n_sensibilidad = min(5, n) if lam >= (c * mu) else n
+        # Si el sistema está colapsado o pesado, bajamos muestras en sensibilidad para no colgar a Render
+        n_sensibilidad = min(3, n) if lam >= (c * mu) else min(5, n)
         
         matriz_sensibilidad = sensibilidad.realizar_analisis_sensibilidad(n_sensibilidad, main.SEMILLA_BASE, lista_lambdas_dinamica, lista_c_dinamica, mu, tiempo_sim_seguro, main.T_WARM_HORAS)
+        
+        # Generar las gráficas actualizadas con los nuevos parámetros del formulario
         generar_graficas(resultados_mc, datos_ejemplo, matriz_sensibilidad, lista_lambdas_dinamica, lista_c_dinamica, ruta_guardado=GRAFICAS_DIR)
+
+        # Forzar el limpiado de figuras de Matplotlib de inmediato
+        plt.close('all')
+        import gc
+        gc.collect()
 
         rho_sim = resultados_mc['rho']['media']
         lq_sim  = resultados_mc['Lq']['media']
