@@ -174,7 +174,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
-        <h2>Módulo 4: Tabla de Validación Analítica ($M/M/c$ vs Simulación)</h2>
+<h2>Módulo 4: Tabla de Éxito y Validación Analítica ($M/M/c$ vs Simulación)</h2>
         <div class="table-responsive">
             <table>
                 <thead>
